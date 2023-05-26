@@ -46,13 +46,10 @@ import com.synconset.FakeR;
 import android.app.Activity;
 import android.app.ActionBar;
 import android.app.AlertDialog;
-import android.app.LoaderManager;
 import android.app.ProgressDialog;
 import android.content.Context;
-import android.content.CursorLoader;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.Loader;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -76,8 +73,18 @@ import android.widget.BaseAdapter;
 import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.content.pm.PackageManager;
+import androidx.core.content.ContextCompat;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import android.Manifest;
+import androidx.fragment.app.FragmentActivity;
+import androidx.loader.app.LoaderManager;
+import androidx.loader.content.Loader;
+import androidx.loader.content.CursorLoader;
+import android.os.Build;
 
-public class MultiImageChooserActivity extends Activity implements OnItemClickListener,
+public class MultiImageChooserActivity extends FragmentActivity implements OnItemClickListener,
         LoaderManager.LoaderCallbacks<Cursor> {
     private static final String TAG = "ImagePicker";
 
@@ -118,9 +125,44 @@ public class MultiImageChooserActivity extends Activity implements OnItemClickLi
     
     private ProgressDialog progress;
 
+    private ActivityResultLauncher<String> requestPermissionLauncher = null;
+
+    private String getRequiredPermission() {
+        String requiredPermission = null;
+        // API 24-32 devices requires READ_EXTERNAL_STORAGE permission to be granted
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+            requiredPermission = Manifest.permission.READ_EXTERNAL_STORAGE;
+        }
+        else {
+            // API 33+ requires READ_MEDIA_IMAGES
+            requiredPermission = Manifest.permission.READ_MEDIA_IMAGES;
+        }
+        return requiredPermission;
+    }
+
+    private void initCursorLoaders() {
+        LoaderManager.enableDebugLogging(false);
+        LoaderManager loaderManager = LoaderManager.getInstance(this);
+        loaderManager.initLoader(CURSORLOADER_THUMBS, null, this);
+        loaderManager.initLoader(CURSORLOADER_REAL, null, this);
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        requestPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+            if (isGranted) {
+                LoaderManager.enableDebugLogging(true);
+                LoaderManager loaderManager = LoaderManager.getInstance(this);
+                loaderManager.initLoader(CURSORLOADER_THUMBS, null, this);
+                loaderManager.initLoader(CURSORLOADER_REAL, null, this);
+            }
+            else {
+                cancelClicked(null, "Permission Denied");
+            }
+        });
+
         fakeR = new FakeR(this);
         setContentView(fakeR.getId("layout", "multiselectorgrid"));
         fileNames.clear();
@@ -167,14 +209,26 @@ public class MultiImageChooserActivity extends Activity implements OnItemClickLi
         ia = new ImageAdapter(this);
         gridView.setAdapter(ia);
 
-        LoaderManager.enableDebugLogging(false);
-        getLoaderManager().initLoader(CURSORLOADER_THUMBS, null, this);
-        getLoaderManager().initLoader(CURSORLOADER_REAL, null, this);
         setupHeader();
         updateAcceptButton();
         progress = new ProgressDialog(this);
         progress.setTitle("Processing Images");
         progress.setMessage("This may take a few moments");
+
+        String requiredPermission = getRequiredPermission();
+        if (ContextCompat.checkSelfPermission(this, requiredPermission) == PackageManager.PERMISSION_GRANTED) {
+            initCursorLoaders();
+        }
+        else if (shouldShowRequestPermissionRationale(requiredPermission)) {
+            // Here we should be providing the user justification, and if the user
+            // declines, the permission should not be asked and instead
+            // we should just immediately cancel.
+            // However, we are going to ignore that for now.
+            requestPermissionLauncher.launch(requiredPermission);
+        }
+        else {
+            requestPermissionLauncher.launch(requiredPermission);
+        }
     }
     
     @Override
@@ -286,8 +340,13 @@ public class MultiImageChooserActivity extends Activity implements OnItemClickLi
         }
     }
     
-    public void cancelClicked(View ignored) {
-        setResult(RESULT_CANCELED);
+    public void cancelClicked(View ignored, String error) {
+        Intent data = null;
+        if (error != null) {
+            data = new Intent();
+            data.putExtra("ERRORMESSAGE", error);
+        }
+        setResult(RESULT_CANCELED, data);
         finish();
     }
 

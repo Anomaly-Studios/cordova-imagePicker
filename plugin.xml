@@ -68,10 +68,13 @@
 			</feature>
 		</config-file>
 		
-		<preference name="AndroidPostSplashScreenTheme" default="@style/Theme.Holo.Light" />
+		<config-file target="AndroidManifest.xml" parent="/manifest/application">
+			<activity android:label="@string/multi_app_name" android:name="com.synconset.MultiImageChooserActivity" android:theme="@android:style/Theme.Holo.Light"></activity>
+		</config-file>
 		
 		<config-file target="AndroidManifest.xml" parent="/manifest">
-		    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+		    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+			<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 		</config-file>
 
 		<source-file src="src/android/com/synconset/ImagePicker/ImagePicker.java" target-dir="src/com/synconset" />
